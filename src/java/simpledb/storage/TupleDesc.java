@@ -37,6 +37,8 @@ public class TupleDesc implements Serializable {
         }
     }
 
+    private List<TDItem> tdItems;
+
     /**
      * @return
      *        An iterator which iterates over all the field TDItems
@@ -44,7 +46,10 @@ public class TupleDesc implements Serializable {
      * */
     public Iterator<TDItem> iterator() {
         // some code goes here
-        return null;
+        if(tdItems == null){
+            return null;
+        }
+        return tdItems.iterator();
     }
 
     private static final long serialVersionUID = 1L;
@@ -62,6 +67,10 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
+        tdItems = new ArrayList<>(typeAr.length);
+        for(int i=0; i<typeAr.length; i++){
+            tdItems.add(new TDItem(typeAr[i], fieldAr[i]==null ? "field"+i : fieldAr[i]));
+        }
     }
 
     /**
@@ -74,6 +83,7 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr) {
         // some code goes here
+        this(typeAr, new String[typeAr.length]);
     }
 
     /**
@@ -81,7 +91,7 @@ public class TupleDesc implements Serializable {
      */
     public int numFields() {
         // some code goes here
-        return 0;
+        return tdItems.size();
     }
 
     /**
@@ -95,7 +105,7 @@ public class TupleDesc implements Serializable {
      */
     public String getFieldName(int i) throws NoSuchElementException {
         // some code goes here
-        return null;
+        return tdItems.get(i).fieldName;
     }
 
     /**
@@ -110,7 +120,7 @@ public class TupleDesc implements Serializable {
      */
     public Type getFieldType(int i) throws NoSuchElementException {
         // some code goes here
-        return null;
+        return tdItems.get(i).fieldType;
     }
 
     /**
@@ -124,7 +134,12 @@ public class TupleDesc implements Serializable {
      */
     public int fieldNameToIndex(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+        for(int i = 0; i< tdItems.size(); i++){
+            if(tdItems.get(i).fieldName.equals(name)){
+                return i;
+            }
+        }
+        throw new NoSuchElementException();
     }
 
     /**
@@ -133,7 +148,11 @@ public class TupleDesc implements Serializable {
      */
     public int getSize() {
         // some code goes here
-        return 0;
+        int size = 0;
+        for(TDItem field : tdItems){
+            size += field.fieldType.getLen();
+        }
+        return size;
     }
 
     /**
@@ -148,7 +167,18 @@ public class TupleDesc implements Serializable {
      */
     public static TupleDesc merge(TupleDesc td1, TupleDesc td2) {
         // some code goes here
-        return null;
+        Type[] typeAr = new Type[td1.numFields()+td2.numFields()];
+        String[] fieldAr = new String[td1.numFields()+td2.numFields()];
+        int j = 0;
+        for(int i=0; i<td1.numFields(); i++,j++){
+            typeAr[j] = td1.getFieldType(i);
+            fieldAr[j] = td1.getFieldName(i);
+        }
+        for(int i=0; i<td2.numFields(); i++,j++){
+            typeAr[j] = td2.getFieldType(i);
+            fieldAr[j] = td2.getFieldName(i);
+        }
+        return new TupleDesc(typeAr, fieldAr);
     }
 
     /**
@@ -164,7 +194,17 @@ public class TupleDesc implements Serializable {
 
     public boolean equals(Object o) {
         // some code goes here
-        return false;
+        if(! (o instanceof TupleDesc)) return false;
+        TupleDesc another = (TupleDesc) o;
+        if(this.numFields() != another.numFields()) {
+            return false;
+        }
+        for(int i=0; i<this.numFields(); i++){
+            if(this.getFieldType(i) != another.getFieldType(i)){
+                return false;
+            }
+        }
+        return true;
     }
 
     public int hashCode() {
@@ -182,6 +222,13 @@ public class TupleDesc implements Serializable {
      */
     public String toString() {
         // some code goes here
-        return "";
+        StringBuilder sb = new StringBuilder();
+        while(this.iterator().hasNext()){
+            sb.append(this.iterator().next().toString());
+            if(this.iterator().hasNext()){
+                sb.append(", ");
+            }
+        }
+        return sb.toString();
     }
 }
