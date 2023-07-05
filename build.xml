@@ -47,6 +47,7 @@
             <depend srcdir="@{srcdir}" destdir="@{destdir}" cache="${depcache}"/>
             <javac srcdir="@{srcdir}" destdir="@{destdir}" includeAntRuntime="no"
                     debug="${compile.debug}" source="${sourceversion}">
+                <compilerarg line="-encoding UTF-8" />
                 <compilerarg value="-Xlint:unchecked" />
                 <!--<compilerarg value="-Xlint:deprecation" />-->
                 <compileoptions/>
