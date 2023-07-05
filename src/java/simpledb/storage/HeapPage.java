@@ -85,7 +85,7 @@ public class HeapPage implements Page {
     private int getHeaderSize() {        
         // some code goes here
         // Header要存储numSlots个bit，计算所需的bytes
-        int headerSize = (int) Math.ceil(numSlots / 8);
+        int headerSize = (int) Math.ceil(numSlots / 8.0);
         return headerSize;
                  
     }
@@ -320,13 +320,13 @@ public class HeapPage implements Page {
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        List<Tuple> tuples = new ArrayList<>();
+        List<Tuple> tupleList = new ArrayList<>();
         for(Tuple tuple:tuples){
             if(tuple != null){
-                tuples.add(tuple);
+                tupleList.add(tuple);
             }
         }
-        return tuples.iterator();
+        return tupleList.iterator();
     }
 
 }

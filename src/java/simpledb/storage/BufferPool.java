@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
@@ -80,7 +81,12 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
         // some code goes here
         Page res = idToPage.get(pid);
-        if(res == null) throw new DbException("no page "+pid+" in the pool.");
+        if(res == null) {
+            Catalog catalog = Database.getCatalog();
+            DbFile f = catalog.getDatabaseFile(pid.getTableId());
+            res = f.readPage(pid);
+            idToPage.put(pid, res);
+        }
         return res;
     }
 

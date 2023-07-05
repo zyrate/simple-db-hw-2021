@@ -223,9 +223,10 @@ public class TupleDesc implements Serializable {
     public String toString() {
         // some code goes here
         StringBuilder sb = new StringBuilder();
-        while(this.iterator().hasNext()){
-            sb.append(this.iterator().next().toString());
-            if(this.iterator().hasNext()){
+        Iterator iterator = this.iterator(); // 这里的this.iterator只能在外面调用一次，否则每次都是新的迭代器
+        while(iterator.hasNext()){
+            sb.append(iterator.next().toString());
+            if(iterator.hasNext()){
                 sb.append(", ");
             }
         }
