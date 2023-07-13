@@ -106,7 +106,7 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        return tables.get(tableid).file.getTupleDesc();
+        return getDatabaseFile(tableid).getTupleDesc();
     }
 
     /**
@@ -117,7 +117,10 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        return tables.get(tableid).file;
+        // 注意null判断
+        Table table = tables.get(tableid);
+        if(table == null) throw new NoSuchElementException("table doesn't exist");
+        return table.file;
     }
 
     public String getPrimaryKey(int tableid) {

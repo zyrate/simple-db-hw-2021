@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.DbException;
 import simpledb.common.Debug;
@@ -95,6 +96,15 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        int pageSize = BufferPool.getPageSize();
+        int offset = page.getId().getPageNumber() * pageSize;
+        byte[] data = page.getPageData();
+        try (RandomAccessFile f = new RandomAccessFile(file, "rw")) {
+            f.seek(offset);
+            f.write(data);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -108,10 +118,32 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+    // 这里的多个Page受影响可能是有副本的意思？
+    // 注意不要依赖tuple里面的RecordId，因为是无意义的
+    // 但是这个RecordId什么时候会用到？这里需不需要赋值？- 不需要，在删除的时候用到
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
+        List<Page> pages = new ArrayList<>();
+
+        // 遍历所有的页面看是否有空闲
+        for(int i=0; i<numPages(); i++){
+            PageId pid = new HeapPageId(getId(), i);
+            HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+            if(heapPage.getNumEmptySlots() > 0){
+                heapPage.insertTuple(t);
+                heapPage.markDirty(true, tid);
+                pages.add(heapPage);
+                return pages;
+            }
+        }
+        
+        // 页面不够了，新建页面，写入文件
+        HeapPage newPage = new HeapPage(new HeapPageId(getId(), numPages()), HeapPage.createEmptyPageData());
+        newPage.insertTuple(t);
+        pages.add(newPage);
+        writePage(newPage); // 因为测试里要计算numPages，所以在这里要写入文件
+        return pages;
         // not necessary for lab1
     }
 
@@ -119,7 +151,11 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
+        ArrayList<Page> pages = new ArrayList<>();
+        PageId pid = t.getRecordId().getPageId();
+        HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+        heapPage.deleteTuple(t);
+        return pages;
         // not necessary for lab1
     }
 
@@ -153,9 +189,13 @@ public class HeapFile implements DbFile {
                     return true;
                 }else{
                     nextPageNo ++;
-                    if(nextPageNo >= numPages()) return false; // 这里如果pageNo超了就不要再去BufferPool取了，通不过测试
-                    currPageIter = getPageIter(nextPageNo);
-                    return currPageIter.hasNext();                    
+                    while(nextPageNo < numPages()){ // 这里注意要能够跳过中间的空位，直到最后一页
+                        currPageIter = getPageIter(nextPageNo);
+                        if(currPageIter.hasNext())
+                            return true;
+                        nextPageNo ++; 
+                    }
+                    return false;              
                 }
             }
 

@@ -253,6 +253,12 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        RecordId recordId = t.getRecordId();
+        int tupleNo = recordId.getTupleNumber();
+        if(recordId.getPageId() != pid || !isSlotUsed(tupleNo)) 
+            throw new DbException("no this tuple on this page"); 
+        tuples[tupleNo] = null;
+        markSlotUsed(tupleNo, false);
     }
 
     /**
@@ -265,7 +271,22 @@ public class HeapPage implements Page {
     public void insertTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        if(getNumEmptySlots() == 0)
+            throw new DbException("this page is full");
+        if(!td.equals(t.getTupleDesc()))
+            throw new DbException("tupleDesc is mismatch");
+        for(int i=0; i<numSlots; i++){
+            if(!isSlotUsed(i)){
+                t.setRecordId(new RecordId(pid, i));
+                tuples[i] = t;
+                markSlotUsed(i, true);
+                break;
+            }
+        }
     }
+
+    private boolean dirty = false;
+    private TransactionId dirtier = null;
 
     /**
      * Marks this page as dirty/not dirty and record that transaction
@@ -274,6 +295,8 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
 	// not necessary for lab1
+        this.dirty = dirty;
+        this.dirtier = tid;
     }
 
     /**
@@ -282,7 +305,7 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // some code goes here
 	// Not necessary for lab1
-        return null;      
+        return dirty?this.dirtier:null;      
     }
 
     /**
@@ -312,6 +335,19 @@ public class HeapPage implements Page {
     private void markSlotUsed(int i, boolean value) {
         // some code goes here
         // not necessary for lab1
+        byte markBit = value?(byte)1:0;
+        byte oldByte = header[i/8];
+        byte newByte = (byte) 0 ;
+        for(int pos=7; pos>=0; pos--){ // 这里注意顺序
+            byte originBit = (byte) (oldByte >> pos & 1);
+            if(pos == i%8){ // 到了要设置的那一位
+                newByte |= markBit;
+            }else{
+                newByte |= originBit;
+            }
+            newByte <<= pos!=0?1:0; // 除了最后一位，填充后左移
+        }
+        header[i/8] = newByte;
     }
 
     /**
