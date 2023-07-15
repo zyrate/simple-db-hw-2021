@@ -9,8 +9,11 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -34,8 +37,9 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    private LinkedList<Page> pageCache; // 页面缓存 - 用LinkedList以便实现LRU算法，牺牲一下访问速度
+    private ArrayList<Page> pageCache; // 页面缓存 - 用ArrayList以便实现LRU算法，牺牲一下访问速度（已优化）
     private int numPages; // 页面缓存上限
+    private Map<PageId, Integer> pageIndexes; // 页面下标 - 为了加快读取，用Map实现快速 get by ID
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -45,7 +49,8 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
-        this.pageCache = new LinkedList<>();
+        this.pageCache = new ArrayList<>(numPages);
+        this.pageIndexes = new HashMap<>(numPages);
     }
     
     public static int getPageSize() {
@@ -80,7 +85,7 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        Page page = findPageById(pid);
+        Page page = findPage(pid);
         if(page == null) {
             Catalog catalog = Database.getCatalog();
             DbFile f = catalog.getDatabaseFile(pid.getTableId());
@@ -89,37 +94,28 @@ public class BufferPool {
             if(pageCache.size() == numPages){ // 需要页面置换
                 evictPage();
             }
-        }else{
-            pageCache.remove(page);
         }
 
-        // 把每次请求的Page放在链表尾部
+        // 把每次请求的Page放在列表尾部
         putPage(page);
 
         return page;
     }
 
-    private Page findPageById(PageId pid){
-        for(Page page:pageCache){
-            if(page.getId().equals(pid)) return page;
-        }
-        return null;
+    private Page findPage(PageId pid){
+        Integer index = pageIndexes.get(pid);
+        return index == null ? null : pageCache.get(index.intValue());
     }
 
     // 实现类似Map的效果
     private void putPage(Page page){
-        Page oldPage = null;
-        for(Page p:pageCache){
-            if(page.getId().equals(p.getId())){
-                oldPage = p;
-                break;
-            }
+        Integer index = pageIndexes.get(page.getId());
+        if(index != null){ // 如果是更新的情况，删掉旧页
+            discardPage(page.getId());
         }
-        // 每次改动或新增的Page放在链表尾部
-        if(oldPage != null){ 
-            pageCache.remove(oldPage);
-        }
-        pageCache.addLast(page);
+        // 将新页添加到尾部
+        pageIndexes.put(page.getId(), pageCache.size());
+        pageCache.add(pageCache.size(), page);
     }
 
     /**
@@ -239,15 +235,17 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
-        Page oldPage = null;
-        for(Page p:pageCache){
-            if(p.getId().equals(pid)){
-                oldPage = p;
-                break;
+        Page oldPage = findPage(pid);
+        if(oldPage != null){
+            int index = pageIndexes.get(pid);
+            pageCache.remove(oldPage);
+            pageIndexes.remove(pid);
+            // 从变动节点到表尾全部更新map中下标（-1）
+            for(int i=index; i<pageCache.size(); i++){ // 这样搞是不是复杂度又上来了？
+                PageId pageId = pageCache.get(i).getId();
+                pageIndexes.put(pageId, pageIndexes.get(pageId)-1);
             }
         }
-        if(oldPage != null)
-            pageCache.remove(oldPage);
     }
 
     /**
@@ -258,7 +256,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        Page page = findPageById(pid);
+        Page page = findPage(pid);
         page.markDirty(false, null);
         f.writePage(page);
     }
@@ -277,7 +275,7 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
-        Page pageToEvict = pageCache.getFirst(); // 换掉链表第一个Page，就是LRU
+        Page pageToEvict = pageCache.get(0); // 换掉链表第一个Page，就是LRU
         try {
             flushPage(pageToEvict.getId());
         } catch (IOException e) {
