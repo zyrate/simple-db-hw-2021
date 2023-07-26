@@ -154,6 +154,7 @@ public class HeapFile implements DbFile {
         PageId pid = t.getRecordId().getPageId();
         HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
         heapPage.deleteTuple(t);
+        pages.add(heapPage);
         return pages;
         // not necessary for lab1
     }
