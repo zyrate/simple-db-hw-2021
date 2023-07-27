@@ -90,7 +90,7 @@ public class BufferPool {
             if(pageCache.isFull()){ // 需要页面置换
                 evictPage();
             }
-            pageCache.addPage(page);
+            pageCache.putPage(page);
         }
 
         return page;
@@ -162,13 +162,9 @@ public class BufferPool {
         DbFile f = catalog.getDatabaseFile(tableId);
         List<Page> pages = f.insertTuple(tid, t);
         for(Page page:pages){
-            page.markDirty(true, tid);;
-            if(pageCache.getPage(page.getId()) == null) {
-                // 插入缓存
-                pageCache.addPage(page);
-            }else{
-                pageCache.updatePage(page); // 更新缓存
-            }
+            page.markDirty(true, tid);
+            // 更新缓存
+            pageCache.putPage(page);
         }
     }
 
@@ -193,13 +189,9 @@ public class BufferPool {
         DbFile f = catalog.getDatabaseFile(t.getRecordId().getPageId().getTableId());
         List<Page> pages = f.deleteTuple(tid, t);
         for(Page page:pages){
-            page.markDirty(true, tid);;
-            if(pageCache.getPage(page.getId()) == null) {
-                // 插入缓存
-                pageCache.addPage(page);
-            }else{
-                pageCache.updatePage(page); // 更新缓存
-            }
+            page.markDirty(true, tid);
+            // 更新缓存
+            pageCache.putPage(page);
         }
     }
 

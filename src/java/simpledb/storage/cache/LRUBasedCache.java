@@ -55,10 +55,16 @@ public class LRUBasedCache implements PageCache{
     }
 
     @Override
-    public void addPage(Page page) {
-        Node node = new Node(page);
-        map.put(page.getId(), node);
-        addToHead(node);
+    public void putPage(Page page) {
+        Node node = map.get(page.getId());
+        if(node == null){
+            node = new Node(page);
+            map.put(page.getId(), node);
+            addToHead(node);
+        }else {
+            node.page = page;
+            moveToHead(node);
+        }
     }
 
     // BufferPool内部访问Page
@@ -80,17 +86,6 @@ public class LRUBasedCache implements PageCache{
         }
         moveToHead(node); // LRU算法 - 向链表头部移动
         return node.page;
-    }
-
-    @Override
-    public boolean updatePage(Page page) {
-        Node node = map.get(page.getId());
-        if(node == null){
-            return false;
-        }
-        node.page = page;
-        moveToHead(node);
-        return true;
     }
 
     @Override
