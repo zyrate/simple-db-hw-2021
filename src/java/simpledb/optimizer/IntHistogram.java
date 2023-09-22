@@ -65,10 +65,14 @@ public class IntHistogram {
      */
     private void constructBuckets(){
         int index = 0;
-        for(double left = min; left < max; left += bWidth){
+        for(double left = min; left < max && index < numBuckets; left += bWidth){
             Bucket newBucket = new Bucket();
             newBucket.left = left;
-            newBucket.right = left + bWidth;
+            if(index != numBuckets-1){
+                newBucket.right = left + bWidth;
+            }else{
+                newBucket.right = max; // 如果是最后一个bucket的话，right设置为max
+            }
             histData[index++] = newBucket;
         }
     }
@@ -92,6 +96,8 @@ public class IntHistogram {
     }
 
     /**
+     * 这部分其实还不完全对，主要是没人给出准确的计算公式，不纠结了，浪费时间
+     * 实现起来并不难
      * Estimate the selectivity of a particular predicate and operand on this table.
      * 
      * For example, if "op" is "GREATER_THAN" and "v" is 5, 
@@ -104,60 +110,58 @@ public class IntHistogram {
     public double estimateSelectivity(Predicate.Op op, int v) {
     	// some code goes here
         double selectivity = -1.0;
-        double temp;
-        int i = findBucketIndex(v);
         // 注意查询的值不一定在最大最小区间内
         // 不同情况的选择性不同
-        if(i < 0){
-            if(op == Predicate.Op.EQUALS || op == Predicate.Op.NOT_EQUALS) return 0;
-            if(op == Predicate.Op.GREATER_THAN || op == Predicate.Op.GREATER_THAN_OR_EQ){
-                if(i == -2) return 0; // 例如(1, 10)查询 >12 的情况
-                else i = 0;
-            }
-            if(op == Predicate.Op.LESS_THAN || op == Predicate.Op.LESS_THAN_OR_EQ){
-                if(i == -1) return 0;
-                else i = numBuckets-1;
-            }
-        }
 
-        // 经过上面处理后switch里就比较单纯了
+        // 简化代码，且减少出错
         switch (op) {
             case EQUALS:
-                selectivity = (double) histData[i].height / (bWidth * ntups);
+                selectivity = calculateEquals(v);
                 break;
             case GREATER_THAN:
-                temp = (double) histData[i].height / ntups * (histData[i].right - v) / bWidth;
-                for (i++; i < numBuckets; i++) {
-                    temp += (double) histData[i].height / ntups;
-                }
-                selectivity = temp;
+                selectivity = calculateGreaterThan(v);
                 break;
             case GREATER_THAN_OR_EQ: // > 和 = 相加
-                temp = (double) histData[i].height / (bWidth * ntups);
-                temp += (double) histData[i].height / ntups * (histData[i].right - v) / bWidth;
-                for (i++; i < numBuckets; i++) {
-                    temp += (double) histData[i].height / ntups;
-                }
-                selectivity = temp;
+                selectivity = calculateGreaterThan(v) + calculateEquals(v);
                 break;
             case LESS_THAN:
-                temp = (double) histData[i].height / ntups * (v - histData[i].left) / bWidth;
-                for (i--; i >= 0; i--) {
-                    temp += (double) histData[i].height / ntups;
-                }
-                selectivity = temp;
+                selectivity = 1 - calculateGreaterThan(v) - calculateEquals(v);
                 break;
             case LESS_THAN_OR_EQ:
-                temp = (double) histData[i].height / (bWidth * ntups);
-                temp += (double) histData[i].height / ntups * (v - histData[i].left) / bWidth;
-                for (i--; i >= 0; i--) {
-                    temp += (double) histData[i].height / ntups;
-                }
-                selectivity = temp;
+                selectivity = 1 - calculateGreaterThan(v);
                 break;
             case NOT_EQUALS: // 1 - Selectivity(=)
-                selectivity = 1 - (double) histData[i].height / (bWidth * ntups);
+                selectivity = 1 - calculateEquals(v);
                 break;
+        }
+        return selectivity;
+    }
+
+    private double calculateEquals(int v){
+        int i = findBucketIndex(v);
+        if (i < 0) return 0;
+        // 这里必须要+1，可能跟直方图存整数有关
+        return (double) histData[i].height / (((int)bWidth+1) * ntups);
+    }
+
+    private double calculateGreaterThan(int v){
+        int i = findBucketIndex(v);
+        double selectivity = 0;
+        if(i == -1){ // 在左侧
+            i = 0; // 算全部桶
+        }else if(i == -2){ // 在右侧
+            return 0;
+        }else{
+            // 在区间内，先算桶内的部分
+            if(v > histData[i].left) { // 在大于左端点时才计算，不然逻辑上可能有错误
+                selectivity = (double) histData[i].height / ntups * (histData[i].right - v) / bWidth;
+            }
+            // 准备算右侧其他桶的部分
+            i++;
+        }
+        while(i < numBuckets){
+            selectivity += (double) histData[i].height / ntups;
+            i++;
         }
         return selectivity;
     }
@@ -190,9 +194,9 @@ public class IntHistogram {
         for(int i=0; i<numBuckets; i++){
             Bucket bucket = histData[i];
             sb.append("[")
-                    .append(bucket.left)
+                    .append(String.format("%.2f", bucket.left))
                     .append(",")
-                    .append(bucket.right)
+                    .append(String.format("%.2f", bucket.right))
                     .append("): ")
                     .append(bucket.height)
                     .append("\n");

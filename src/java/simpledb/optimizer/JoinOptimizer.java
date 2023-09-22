@@ -1,5 +1,6 @@
 package simpledb.optimizer;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.ParsingException;
 import simpledb.execution.*;
@@ -130,7 +131,9 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            // 公式：scancost(t1) + ntups(t1) x scancost(t2) + ntups(t1) x ntups(t2)
+            double cost = cost1 + card1 * cost2 + card1 * card2;
+            return cost;
         }
     }
 
@@ -176,6 +179,19 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // some code goes here
+        // 根据实验的描述来写 - 那么多参数有何用？
+        if(joinOp == Predicate.Op.EQUALS){
+            if(t1pkey){
+                card = card2;
+            }else if(t2pkey){
+                card = card1;
+            }else{
+                card = Math.max(card1, card2);
+            }
+        }else{
+            card = (int)(card1 * card2 * 0.3);
+        }
+
         return card <= 0 ? 1 : card;
     }
 
@@ -238,7 +254,31 @@ public class JoinOptimizer {
 
         // some code goes here
         //Replace the following
-        return joins;
+        // 主要用已经提供的工具 - 根据伪代码
+        Set<LogicalJoinNode> joinSet = new HashSet<>(joins);
+        PlanCache planCache = new PlanCache();
+        int size = joinSet.size();
+        for(int i=1; i<=size; i++){
+            Set<Set<LogicalJoinNode>> sets = enumerateSubsets(joins, i);
+            for(Set<LogicalJoinNode> set:sets){
+                double bestCost = Double.MAX_VALUE;
+                CostCard bestPlan = null;
+                for(LogicalJoinNode joinNode:set){
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinNode, set, bestCost, planCache);
+                    if(costCard != null && costCard.cost < bestCost){
+                        bestCost = costCard.cost;
+                        bestPlan = costCard; // 这里面包含着计划
+                    }
+                }
+                if(bestPlan != null){
+                    planCache.addPlan(set, bestPlan.cost, bestPlan.card, bestPlan.plan);
+                }
+            }
+        }
+        if(explain){
+            printJoins(planCache.getOrder(joinSet), planCache, stats, filterSelectivities);
+        }
+        return planCache.getOrder(joinSet);
     }
 
     // ===================== Private Methods =================================
