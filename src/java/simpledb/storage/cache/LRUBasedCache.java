@@ -107,7 +107,15 @@ public class LRUBasedCache implements PageCache{
 
     @Override
     public PageId pidToBeEvicted() {
-        return tail.pre.page.getId();
+        Node n = tail.pre;
+        while(n != head){
+            if(n.page.isDirty() != null){ // 确保不是脏页
+                n = n.pre;
+                continue;
+            }
+            break;
+        }
+        return n==head?null:n.page.getId(); // 返回null代表全都是脏页
     }
 
     @Override

@@ -4,9 +4,9 @@ import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
-import simpledb.common.DeadlockException;
 import simpledb.storage.cache.LRUBasedCache;
 import simpledb.storage.cache.PageCache;
+import simpledb.transaction.LockManager;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
@@ -38,6 +38,8 @@ public class BufferPool {
     private int numPages; // 页面缓存上限
     private final PageCache pageCache; // 自定义的页面缓存结构
 
+    private final LockManager lockManager; // 锁管理器
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -47,6 +49,7 @@ public class BufferPool {
         // some code goes here
         this.numPages = numPages;
         this.pageCache = new LRUBasedCache(numPages);
+        this.lockManager = new LockManager();
     }
     
     public static int getPageSize() {
@@ -81,6 +84,15 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
+
+        if(perm == Permissions.READ_ONLY){
+            // 获取共享锁
+            lockManager.acquireSharedLock(tid, pid);
+        }else{
+            // 获取排他锁
+            lockManager.acquireExclusiveLock(tid, pid);
+        }
+
         Page page = pageCache.accessPage(pid);
         if(page == null) {
             Catalog catalog = Database.getCatalog();
@@ -108,6 +120,7 @@ public class BufferPool {
     public  void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+        lockManager.releaseLock(tid, pid);
     }
 
     /**
@@ -118,13 +131,14 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) {
         // some code goes here
         // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdsLock(tid, p);
     }
 
     /**
@@ -137,6 +151,20 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+        if(commit){ // 提交，所有相关页面写入磁盘
+            try {
+                flushPages(tid);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }else{ // Abort，丢弃所有页面
+            for(PageId pid : lockManager.getLookupList(tid)){
+                discardPage(pid);
+            }
+        }
+        for(PageId pid : lockManager.getLookupList(tid)){
+            lockManager.releaseLock(tid, pid); // 逐个释放锁
+        }
     }
 
     /**
@@ -232,6 +260,7 @@ public class BufferPool {
         // not necessary for lab1
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
         Page page = pageCache.getPage(pid);
+        if(page == null) return;
         page.markDirty(false, null);
         f.writePage(page);
     }
@@ -241,6 +270,9 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for(PageId pid : lockManager.getLookupList(tid)){
+            flushPage(pid);
+        }
     }
 
     /**
@@ -251,6 +283,9 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         PageId pageToEvict = pageCache.pidToBeEvicted();
+        if(pageToEvict == null){
+            throw new DbException("All pages in the buffer pool are dirty.");
+        }
         try {
             flushPage(pageToEvict);
         } catch (IOException e) {
