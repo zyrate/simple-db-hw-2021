@@ -23,7 +23,6 @@ public class DeadlockDetector {
      * @param listToWait - 有等待多个持共享锁事务的情况（可以直接将holds传进来）
      */
     public void blockOccurs(TransactionId tid, List<TransactionId> listToWait){
-//        adjList.put(tid, new LinkedList<>(listToWait));
         adjList.put(tid, listToWait);
     }
 
@@ -60,7 +59,7 @@ public class DeadlockDetector {
         List<TransactionId> adj = adjList.get(tid);
         if(adj != null){
             for(TransactionId t:adj){
-                if(tid == t) continue; // 跳过自反边的情况 - 单个锁升级等待不算死锁
+                if(tid.equals(t)) continue; // 跳过自反边的情况 - 单个锁升级等待不算死锁
                 int state = nodeState.getOrDefault(t, 0);
                 if(state == 2){
                     victim = t;

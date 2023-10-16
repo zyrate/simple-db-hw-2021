@@ -1,7 +1,6 @@
 package simpledb.transaction;
 
 import simpledb.common.Database;
-import simpledb.storage.BufferPool;
 import simpledb.storage.PageId;
 
 import java.util.*;
@@ -70,7 +69,7 @@ public class LockManager {
         PageLock pageLock = requirePageLock(pid);
 
         // 已经有排他锁且不是同一个事务（一个事务可以同时拥有两种锁）
-        while(pageLock.lockState == -1 && pageLock.holds.get(0) != tid){
+        while(pageLock.lockState == -1 && !pageLock.holds.get(0).equals(tid)){
             deadlockDetector.blockOccurs(tid, pageLock.holds);
             if(deadlockDetector.detectCycle()){ // 检测到死锁
                 deadlockDetector.notified(tid);
@@ -94,10 +93,10 @@ public class LockManager {
 
         while(pageLock.lockState != 0){
             // 该事务已经获取了共享锁，升级为排他锁
-            if(pageLock.lockState == 1 && pageLock.holds.get(0) == tid){
+            if(pageLock.lockState == 1 && pageLock.holds.get(0).equals(tid)){
                 pageLock.stateIncrement(-2);
                 return;
-            }else if(pageLock.lockState == -1 && pageLock.holds.get(0) == tid){
+            }else if(pageLock.lockState == -1 && pageLock.holds.get(0).equals(tid)){
                 // 重入排他锁 - 不记录
                 return;
             }
@@ -123,11 +122,7 @@ public class LockManager {
     // 事务是否对某一页面持有锁
     public boolean holdsLock(TransactionId tid, PageId pid){
         PageLock pageLock = requirePageLock(pid);
-        for(TransactionId t: pageLock.holds){
-            if(t.equals(tid))
-                return true;
-        }
-        return false;
+        return pageLock.holds.contains(tid);
     }
 
     // 释放锁

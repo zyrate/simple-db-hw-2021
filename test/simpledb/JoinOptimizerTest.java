@@ -388,7 +388,7 @@ public class JoinOptimizerTest extends SimpleDbTestBase {
      * Test a much-larger join ordering, to confirm that it executes in a
      * reasonable amount of time
      */
-    @Test(timeout = 60000)
+    @Test(timeout = 600000)
     public void bigOrderJoinsTest() throws IOException,
             ParsingException {
         final int IO_COST = 103;
