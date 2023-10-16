@@ -85,11 +85,11 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
         // some code goes here
 
-        if(perm == Permissions.READ_ONLY){
+        if(perm == Permissions.READ_ONLY && !holdsLock(tid, pid)){
             // 获取共享锁
             lockManager.acquireSharedLock(tid, pid);
         }else{
-            // 获取排他锁
+            // 获取排他锁 - 存在锁升级情况，所以不判断holdsLock
             lockManager.acquireExclusiveLock(tid, pid);
         }
 
@@ -151,6 +151,7 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+        List<PageId> pages = lockManager.getLookupList(tid);
         if(commit){ // 提交，所有相关页面写入磁盘
             try {
                 flushPages(tid);
@@ -158,11 +159,11 @@ public class BufferPool {
                 throw new RuntimeException(e);
             }
         }else{ // Abort，丢弃所有页面
-            for(PageId pid : lockManager.getLookupList(tid)){
+            for(PageId pid : pages){
                 discardPage(pid);
             }
         }
-        for(PageId pid : lockManager.getLookupList(tid)){
+        for(PageId pid : pages){
             lockManager.releaseLock(tid, pid); // 逐个释放锁
         }
     }
