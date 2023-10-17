@@ -6,6 +6,7 @@ import simpledb.storage.PageId;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 自定义的PageCache结构
@@ -33,7 +34,7 @@ public class LRUBasedCache implements PageCache{
 
     public LRUBasedCache(int capacity){
         this.capacity = capacity;
-        map = new HashMap<>(capacity);
+        map = new ConcurrentHashMap<>(capacity);
         // 创建两个哨兵节点
         this.head = new Node(null);
         this.tail = new Node(null);
@@ -55,7 +56,7 @@ public class LRUBasedCache implements PageCache{
     }
 
     @Override
-    public void putPage(Page page) {
+    public synchronized void putPage(Page page) {
         Node node = map.get(page.getId());
         if(node == null){
             node = new Node(page);
@@ -79,7 +80,7 @@ public class LRUBasedCache implements PageCache{
 
     // BufferPool外部访问Page
     @Override
-    public Page accessPage(PageId pid) {
+    public synchronized Page accessPage(PageId pid) {
         Node node = map.get(pid);
         if(node == null){
             return null;
@@ -89,15 +90,14 @@ public class LRUBasedCache implements PageCache{
     }
 
     @Override
-    public boolean removePage(PageId pid) {
+    public synchronized void removePage(PageId pid) {
         Node node = map.get(pid);
         if(node == null){
-            return false;
+            return;
         }
         node.pre.next = node.next;
         node.next.pre = node.pre;
         map.remove(pid);
-        return true;
     }
 
     @Override
@@ -106,7 +106,7 @@ public class LRUBasedCache implements PageCache{
     }
 
     @Override
-    public PageId pidToBeEvicted() {
+    public synchronized PageId pidToBeEvicted() {
         Node n = tail.pre;
         while(n != head){
             if(n.page.isDirty() != null){ // 确保不是脏页
@@ -119,7 +119,7 @@ public class LRUBasedCache implements PageCache{
     }
 
     @Override
-    public void evictPage() {
+    public synchronized void evictPage() {
         removePage(pidToBeEvicted()); // 移除掉链表尾部结点
     }
 

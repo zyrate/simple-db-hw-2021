@@ -236,7 +236,10 @@ public class BufferPool {
         // not necessary for lab1
         Iterator<Page> iterator = pageCache.iterator();
         while(iterator.hasNext()){
-            flushPage(iterator.next().getId());
+            Page page = iterator.next();
+            if(page.isDirty() != null) {
+                flushPage(page.getId());
+            }
         }
     }
 

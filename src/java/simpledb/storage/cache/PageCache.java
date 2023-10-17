@@ -9,7 +9,7 @@ public interface PageCache {
     void putPage(Page page);
     Page getPage(PageId pid);
     Page accessPage(PageId pid);
-    boolean removePage(PageId pid);
+    void removePage(PageId pid);
     boolean isFull();
     PageId pidToBeEvicted();
     void evictPage();
