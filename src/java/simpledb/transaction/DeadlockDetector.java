@@ -1,6 +1,7 @@
 package simpledb.transaction;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 死锁检测
@@ -13,8 +14,8 @@ public class DeadlockDetector {
     private TransactionId victim; // 要被abort的事务 - 暂时用不上
 
     public DeadlockDetector(){
-        adjList = new HashMap<>();
-        nodeState = new HashMap<>();
+        adjList = new ConcurrentHashMap<>();
+        nodeState = new ConcurrentHashMap<>();
     }
 
     /**
