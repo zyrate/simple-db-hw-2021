@@ -33,6 +33,7 @@ public class BTreeFile implements DbFile {
 	private final int tableid ;
 	private final int keyField;
 
+
 	/**
 	 * Constructs a B+ tree file backed by the specified file.
 	 * 
@@ -188,6 +189,24 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
+		if(pid.pgcateg() == BTreePageId.INTERNAL){ // 非叶结点
+			// 从BufferPool拿到指定pid的非叶页面
+			BTreeInternalPage inPage = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+			Iterator<BTreeEntry> iterator = inPage.iterator();
+			// 遍历该页面的所有key，和目标f作比较（见B+树的查找）
+			while(iterator.hasNext()){
+				BTreeEntry entry = iterator.next();
+				if(f==null || f.compare(Op.LESS_THAN, entry.getKey())){ // 目标值为null或小于key值，进入左孩子递归
+					return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, f);
+				}
+				if(!iterator.hasNext()){ // 遍历到最后一个，进入右孩子递归
+					return findLeafPage(tid, dirtypages, entry.getRightChild(), perm, f);
+				}
+			}
+		}else if(pid.pgcateg() == BTreePageId.LEAF){ // 叶子结点，直接返回指定pid的叶子页面
+			return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+		}
+
         return null;
 	}
 	
