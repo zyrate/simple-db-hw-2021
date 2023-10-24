@@ -196,7 +196,7 @@ public class BTreeFile implements DbFile {
 			// 遍历该页面的所有key，和目标f作比较（见B+树的查找）
 			while(iterator.hasNext()){
 				BTreeEntry entry = iterator.next();
-				if(f==null || f.compare(Op.LESS_THAN, entry.getKey())){ // 目标值为null或小于key值，进入左孩子递归
+				if(f==null || f.compare(Op.LESS_THAN_OR_EQ, entry.getKey())){ // 目标值为null或小于等于key值，进入左孩子递归
 					return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, f);
 				}
 				if(!iterator.hasNext()){ // 遍历到最后一个，进入右孩子递归
@@ -258,8 +258,38 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
-		
+
+		int splitFrom = page.getNumTuples() / 2;
+		// 新叶子结点
+		BTreeLeafPage newLeaf = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		Iterator<Tuple> iterator = page.reverseIterator();
+		Field middleKey = null; // 中间Key
+		// 逆序遍历旧叶子结点进行元组移动
+		for(int i=page.getNumTuples()-1; iterator.hasNext() && i>=splitFrom; i--){
+			Tuple t = iterator.next();
+			page.deleteTuple(t);
+			newLeaf.insertTuple(t);
+			if(i == splitFrom){
+				middleKey = t.getField(keyField);
+			}
+		}
+		// 左右兄弟连接
+		newLeaf.setLeftSiblingId(page.getId());
+		newLeaf.setRightSiblingId(page.getRightSiblingId());
+		page.setRightSiblingId(newLeaf.getId());
+		/* key上移 */
+		BTreeEntry bTreeEntry = new BTreeEntry(middleKey, page.getId(), newLeaf.getId());
+		// 这个提供的方法里面有向上递归的部分
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), field);
+		parent.insertEntry(bTreeEntry);
+		page.setParentId(parent.getId());
+		newLeaf.setParentId(parent.getId());
+		// 要插入的Key如果小于middle key，返回左（旧）叶子
+		if(field.compare(Op.LESS_THAN, middleKey)){
+			return page;
+		}
+		// 否则返回右（新）叶子
+		return newLeaf;
 	}
 	
 	/**
@@ -296,7 +326,36 @@ public class BTreeFile implements DbFile {
 		// the parent pointers of all the children moving to the new page.  updateParentPointers()
 		// will be useful here.  Return the page into which an entry with the given key field
 		// should be inserted.
-		return null;
+		int splitFrom = page.getNumEntries() / 2;
+		// 新非叶结点
+		BTreeInternalPage newInternal = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		Iterator<BTreeEntry> iterator = page.reverseIterator();
+		BTreeEntry middleEntry = null; // 中间entry
+		// 遍历旧非叶结点进行元组移动
+		for(int i=page.getNumEntries()-1; iterator.hasNext() && i>=splitFrom; i--){
+			BTreeEntry e = iterator.next();
+			page.deleteKeyAndRightChild(e);
+			if(i == splitFrom){
+				middleEntry = e;
+				break;
+			}
+			newInternal.insertEntry(e);
+		}
+		// 这个提供的方法里面有向上递归的部分
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), field);
+		middleEntry.setLeftChild(page.getId());
+		middleEntry.setRightChild(newInternal.getId());
+		parent.insertEntry(middleEntry);
+		page.setParentId(parent.getId());
+		newInternal.setParentId(parent.getId());
+		// 更新新结点所有子页面的父指针
+		updateParentPointers(tid, dirtypages, newInternal);
+		// 要插入的Key如果小于middle key，返回左（旧）非叶
+		if(field.compare(Op.LESS_THAN, middleEntry.getKey())){
+			return page;
+		}
+		// 否则返回右（新）非叶
+		return newInternal;
 	}
 	
 	/**
