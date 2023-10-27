@@ -647,6 +647,25 @@ public class BTreeFile implements DbFile {
         // Move some of the tuples from the sibling to the page so
 		// that the tuples are evenly distributed. Be sure to update
 		// the corresponding parent entry.
+		int halfFull = page.getMaxTuples() / 2 - 1;
+		int numToMove = (sibling.getNumTuples() - halfFull) / 2;
+		Iterator<Tuple> iterator;
+		if(isRightSibling){
+			iterator = sibling.iterator();
+		}else{
+			iterator = sibling.reverseIterator();
+		}
+		// steal
+		for(int i=0; i<numToMove && iterator.hasNext(); i++){
+			Tuple t = iterator.next();
+			sibling.deleteTuple(t);
+			page.insertTuple(t);
+		}
+		// 如果从左边偷的，本页第一个key上替；如果从右边偷的，右边第一个key上替
+		Field key = isRightSibling ? sibling.iterator().next().getField(keyField)
+								   : page.iterator().next().getField(keyField);
+		entry.setKey(key);
+		parent.updateEntry(entry);
 	}
 
 	/**
@@ -726,6 +745,29 @@ public class BTreeFile implements DbFile {
 		// that the entries are evenly distributed. Be sure to update
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
+		int halfFull = page.getMaxEntries() / 2 - 1;
+		int numToMove = (leftSibling.getNumEntries() - halfFull) / 2;
+		Iterator<BTreeEntry> iterator = leftSibling.reverseIterator();
+		RecordId parentRecordId = parentEntry.getRecordId();
+		for(int i=0; i<numToMove && iterator.hasNext(); i++){
+			BTreeEntry e = iterator.next();
+			leftSibling.deleteKeyAndRightChild(e);
+			if(i == 0){ // 开始的时候首先把父Entry旋转下来
+				parentEntry.setLeftChild(e.getRightChild());
+				parentEntry.setRightChild(page.getChildId(0));
+				page.insertEntry(parentEntry);
+			}else if(i == numToMove-1){ // 到最后一个再把Entry旋转到父Entry的位置
+				e.setLeftChild(leftSibling.getId());
+				e.setRightChild(page.getId());
+				e.setRecordId(parentRecordId); // 必须要提前记录父Entry的RecordId，不然无法更新
+				parent.updateEntry(e);
+				break;
+			}
+			page.insertEntry(e);
+		}
+		// 更新两个非叶Page的子Page的父指针
+		updateParentPointers(tid, dirtypages, page);
+		updateParentPointers(tid, dirtypages, leftSibling);
 	}
 	
 	/**
@@ -753,6 +795,29 @@ public class BTreeFile implements DbFile {
 		// that the entries are evenly distributed. Be sure to update
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
+		int halfFull = page.getMaxEntries() / 2 - 1;
+		int numToMove = (rightSibling.getNumEntries() - halfFull) / 2;
+		Iterator<BTreeEntry> iterator = rightSibling.iterator();
+		RecordId parentRecordId = parentEntry.getRecordId();
+		for(int i=0; i<numToMove && iterator.hasNext(); i++){
+			BTreeEntry e = iterator.next();
+			rightSibling.deleteKeyAndLeftChild(e);
+			if(i == 0){ // 开始的时候首先把父Entry旋转下来
+				parentEntry.setLeftChild(page.getChildId(page.getNumEntries())); // 这里是最后一个child
+				parentEntry.setRightChild(e.getLeftChild());
+				page.insertEntry(parentEntry);
+			}else if(i == numToMove-1){ // 到最后一个再把Entry旋转到父Entry的位置
+				e.setLeftChild(page.getId());
+				e.setRightChild(rightSibling.getId());
+				e.setRecordId(parentRecordId); // 必须要提前记录父Entry的RecordId，不然无法更新
+				parent.updateEntry(e);
+				break;
+			}
+			page.insertEntry(e);
+		}
+		// 更新两个非叶Page的子Page的父指针
+		updateParentPointers(tid, dirtypages, page);
+		updateParentPointers(tid, dirtypages, rightSibling);
 	}
 	
 	/**
