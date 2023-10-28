@@ -26,7 +26,7 @@ public class LockManager {
         this.deadlockDetector = new DeadlockDetector();
     }
 
-    private PageLock requirePageLock(PageId pid){
+    private PageLock getPageLock(PageId pid){
         PageLock pageLock = pageLocks.get(pid);
         if(pageLock == null){
             pageLock = new PageLock(pid);
@@ -55,7 +55,7 @@ public class LockManager {
 
     // 获取共享锁
     public void acquireSharedLock(TransactionId tid, PageId pid) throws TransactionAbortedException {
-        PageLock pageLock = requirePageLock(pid);
+        PageLock pageLock = getPageLock(pid);
         synchronized (pageLock){
             // 已经有排他锁且不是同一个事务（一个事务可以同时拥有两种锁）
             while(pageLock.getLockState() == -1 && !pageLock.holds.get(0).equals(tid)){
@@ -71,6 +71,10 @@ public class LockManager {
                     throw new RuntimeException(e);
                 }
             }
+            if(pageLock.getLockState() > 0 && pageLock.holds.contains(tid)){
+                // 重入共享锁 - 不记录
+                return;
+            }
             // 被唤醒后，记录已获取状态
             pageLock.stateIncrement(1);
             pageLock.holds.add(tid);
@@ -80,7 +84,7 @@ public class LockManager {
 
     // 获取排他锁
     public void acquireExclusiveLock(TransactionId tid, PageId pid) throws TransactionAbortedException {
-        PageLock pageLock = requirePageLock(pid);
+        PageLock pageLock = getPageLock(pid);
         synchronized (pageLock){
             while(pageLock.getLockState() != 0){
                 // 该事务已经获取了共享锁，升级为排他锁
@@ -113,13 +117,13 @@ public class LockManager {
 
     // 事务是否对某一页面持有锁
     public boolean holdsLock(TransactionId tid, PageId pid){
-        PageLock pageLock = requirePageLock(pid);
+        PageLock pageLock = getPageLock(pid);
         return pageLock.holds.contains(tid);
     }
 
     // 释放锁
     public void releaseLock(TransactionId tid, PageId pid){
-        PageLock pageLock = requirePageLock(pid);
+        PageLock pageLock = getPageLock(pid);
         synchronized (pageLock){
             pageLock.holds.remove(tid);
             removeFromLookups(tid, pid);
