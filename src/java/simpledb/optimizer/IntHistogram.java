@@ -96,8 +96,6 @@ public class IntHistogram {
     }
 
     /**
-     * 这部分其实还不完全对，主要是没人给出准确的计算公式，不纠结了，浪费时间
-     * 实现起来并不难
      * Estimate the selectivity of a particular predicate and operand on this table.
      * 
      * For example, if "op" is "GREATER_THAN" and "v" is 5, 
@@ -119,16 +117,16 @@ public class IntHistogram {
                 selectivity = calculateEquals(v);
                 break;
             case GREATER_THAN:
-                selectivity = calculateGreaterThan(v);
+                selectivity = 1 - calculateLessThan(v) - calculateEquals(v);
                 break;
-            case GREATER_THAN_OR_EQ: // > 和 = 相加
-                selectivity = calculateGreaterThan(v) + calculateEquals(v);
+            case GREATER_THAN_OR_EQ:
+                selectivity = 1 - calculateLessThan(v);
                 break;
             case LESS_THAN:
-                selectivity = 1 - calculateGreaterThan(v) - calculateEquals(v);
+                selectivity = calculateLessThan(v);
                 break;
             case LESS_THAN_OR_EQ:
-                selectivity = 1 - calculateGreaterThan(v);
+                selectivity = calculateLessThan(v) + calculateEquals(v);
                 break;
             case NOT_EQUALS: // 1 - Selectivity(=)
                 selectivity = 1 - calculateEquals(v);
@@ -144,24 +142,19 @@ public class IntHistogram {
         return (double) histData[i].height / (((int)bWidth+1) * ntups);
     }
 
-    private double calculateGreaterThan(int v){
-        int i = findBucketIndex(v);
+    private double calculateLessThan(int v){
+        int index = findBucketIndex(v);
         double selectivity = 0;
-        if(i == -1){ // 在左侧
-            i = 0; // 算全部桶
-        }else if(i == -2){ // 在右侧
+        if(index == -1){ // 在左侧
             return 0;
+        }else if(index == -2){ // 在右侧
+            return 1;
         }else{
             // 在区间内，先算桶内的部分
-            if(v > histData[i].left) { // 在大于左端点时才计算，不然逻辑上可能有错误
-                selectivity = (double) histData[i].height / ntups * (histData[i].right - v) / bWidth;
-            }
-            // 准备算右侧其他桶的部分
-            i++;
+            selectivity = (double) histData[index].height / ntups * (v - histData[index].left) / bWidth;
         }
-        while(i < numBuckets){
+        for(int i=0; i<index; i++){
             selectivity += (double) histData[i].height / ntups;
-            i++;
         }
         return selectivity;
     }
