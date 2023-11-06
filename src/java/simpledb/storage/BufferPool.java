@@ -267,17 +267,27 @@ public class BufferPool {
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
         Page page = pageCache.getPage(pid);
         if(page == null) return;
+
+        TransactionId dirtier = page.isDirty();
+        if(dirtier != null){
+            Database.getLogFile().logWrite(dirtier, page.getBeforeImage(), page);
+            Database.getLogFile().force();
+            f.writePage(page);
+        }
+
         page.markDirty(false, null);
-        f.writePage(page);
     }
 
     /** Write all pages of the specified transaction to disk.
      */
-    public synchronized  void flushPages(TransactionId tid) throws IOException {
+    public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
         for(PageId pid : lockManager.getLookupList(tid)){
             flushPage(pid);
+            Page page = pageCache.getPage(pid);
+            if(page != null)
+                page.setBeforeImage(); // 用当前的内容当做下一次的before
         }
     }
 
@@ -301,4 +311,7 @@ public class BufferPool {
         pageCache.evictPage();
     }
 
+    public PageCache getPageCache(){
+        return pageCache;
+    }
 }
