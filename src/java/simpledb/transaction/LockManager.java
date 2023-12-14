@@ -65,7 +65,7 @@ public class LockManager {
                     throw new TransactionAbortedException();
                 }
                 try {
-                    pageLock.wait(10);
+                    pageLock.wait();
                     deadlockDetector.notified(tid);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -102,7 +102,7 @@ public class LockManager {
                     throw new TransactionAbortedException();
                 }
                 try {
-                    pageLock.wait(10);
+                    pageLock.wait();
                     deadlockDetector.notified(tid);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -140,7 +140,7 @@ public class LockManager {
     }
 
 
-    // 不用定时检测的方法了 - 因为主程序接不到异常
+    // 不用下面的定时检测的方法了 - 因为主程序接不到异常
     @Deprecated
     private volatile boolean detecting = false;
 
